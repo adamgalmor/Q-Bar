@@ -1,0 +1,131 @@
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.Request; 
+import net.glxn.qrgen.QRCode;
+import java.net.URL;
+import java.rmi.server.UID;
+import intel.pcsdk.*;
+
+PXCUPipeline pp = null;
+PImage rgb=null;
+PImage QRImg = null;
+
+class QRHandler extends AbstractHandler
+{
+  public void handle(String target, Request req, HttpServletRequest request, HttpServletResponse response)
+    throws IOException, ServletException
+  {   
+    if (request.getParameter("qr") == null) return;
+    //String token = new UID().toString();
+    String token = request.getParameter("access_token");    
+    println(token);
+    URL url = new URL("http://localhost:8080?token=" + token);
+    response.setContentType("image/png");
+    response.setStatus(HttpServletResponse.SC_OK);
+    QRCode.from(url.toString()).to(ImageType.PNG).withSize(250, 250).writeTo(response.getOutputStream());
+    ((Request)request).setHandled(true);
+  }
+};
+
+class OrderHandler extends AbstractHandler {
+  public void handle(String target, Request req, HttpServletRequest request, HttpServletResponse response)
+    throws IOException, ServletException
+  {
+    if (request.getMethod().toUpperCase().equals("OPTIONS")) {
+      response.setHeader("Access-Control-Allow-Origin", "*");
+      response.setHeader("Access-Control-Allow-Methods", "*"); 
+      response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+      ((Request)request).setHandled(true); 
+      response.setStatus(HttpServletResponse.SC_OK);
+      return;
+    }    
+
+    if (!request.getMethod().toUpperCase().equals("POST")) return;
+
+    JSONArray drinks = new JSONArray(request.getReader());
+    println(drinks.toString());
+    if (request.getParameter("order") == null) return;
+
+    String token = request.getParameter("access_token");
+  
+   response.setContentType("application/json");
+   response.getWriter().println(drinks.toString());
+
+    ((Request)request).setHandled(true); 
+    response.setStatus(HttpServletResponse.SC_OK);
+  }
+};
+
+void setup() {
+  size(640, 480);
+  pp = new PXCUPipeline(this);
+  if (!pp.Init(PXCUPipeline.GESTURE|PXCUPipeline.COLOR_VGA)) {
+    print("Failed to initialize PXCUPipeline\n");
+  }
+
+  int[] csize=new int[2];
+  if (pp.QueryRGBSize(csize)) {
+    print("RGBSize("+csize[0]+","+csize[1]+")\n");
+    rgb=createImage(csize[0], csize[1], RGB);
+  }
+
+  Server server = new Server(8080);
+
+  ResourceHandler resource_handler = new ResourceHandler();
+  resource_handler.setDirectoriesListed(true);
+  resource_handler.setWelcomeFiles(new String[] { 
+    "index.html"
+  }
+  );
+  resource_handler.setResourceBase(sketchPath(""));
+
+  HandlerCollection handlers = new HandlerCollection();
+  handlers.setHandlers(new Handler[]
+  { 
+    new QRHandler(), 
+    new OrderHandler(), 
+    resource_handler
+  }
+  );
+
+
+  server.setHandler(handlers);
+
+  try {
+    server.start();
+    //server.join();
+  } 
+  catch(Exception e) {
+    println("Could not start http server. Reason: " + e.toString());
+  };
+}
+
+void draw() {
+  if (pp.AcquireFrame(false)) {
+
+    if (pp.QueryRGB(rgb))
+      image(rgb, 0, 0);
+
+    PXCMGesture.Gesture gdata = new PXCMGesture.Gesture();
+    if (pp.QueryGesture(PXCMGesture.Gesture.LABEL_ANY, gdata)) {
+      if (gdata.label == PXCMGesture.Gesture.LABEL_HAND_WAVE) {
+        //println(gdata.label);
+        //println(gdata.timeStamp);
+        try {
+          URL url = new URL("http://localhost:8080?token=" + (new UID()).toString());
+          File imgFile = QRCode.from(url.toString()).to(ImageType.PNG).file();
+          QRImg = loadImage(imgFile.getAbsolutePath());
+        } 
+        catch(Exception e) {
+          e.printStackTrace();
+        }
+      }
+    }
+
+    pp.ReleaseFrame();
+  }
+
+  if (QRImg!=null)
+    image(QRImg, 0, 0);
+}
+

@@ -1,0 +1,495 @@
+<!doctype html>
+<html>
+<head>
+	<script src="js/jquery-1.10.2.min.js"></script>
+	<script src="js/underscore.js"></script>
+	<script src="js/backbone-min.js"></script>
+	<script src="js/bootstrap.min.js"></script>
+	<script src="js/backbone-min.js"></script>
+
+	<script type="text/javascript" src="js/cometd.js"></script>
+    <script type="text/javascript" src="js/org/cometd/AckExtension.js"></script>
+    <script type="text/javascript" src="js/org/cometd/ReloadExtension.js"></script>
+	<script type="text/javascript" src="js/jquery.cometd.js"></script>
+	<script type="text/javascript" src="js/jquery.cometd-reload.js"></script>
+	<script type="text/javascript" src="js/jquery.cometd-ack.js"></script>
+
+	<link rel="stylesheet" href="css/bootstrap.min.css"></link>
+	<link rel="stylesheet" href="css/bootstrap-responsive.css"></link>
+	<link rel="stylesheet" href="css/font-awesome.min.css"></link>
+
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<style>
+	body {
+		background: #444;
+	}
+	.nav-tabs>li>a {
+		text-shadow: 0 1px 0 #000;
+		color: #aaa;
+	}	
+	.nav-tabs>li.active>a {
+		text-shadow: 0 1px 0 #ccc;
+	}	
+	#logo {
+		position: absolute;
+		right: 8px;		
+		height: 40px;
+		margin: 10px;
+	}
+	#main {
+		position: relative;
+		top: 28px;
+	}
+	.tab-content {
+		margin-top: -20px;
+		border: 1px solid #ccc;
+		border-top: none;
+		background: #fff;
+		padding: 10px;
+		padding-bottom: 0px;		
+	}
+	#social h2 {
+		text-align: center;
+	}
+	.listitem {
+		line-height: 50px;
+		height: 50px;
+		border-bottom: 1px solid #ccc;
+	}
+	.listitem:last-child {
+		border-bottom: none;
+	}
+	.listitem input[type="checkbox"] {
+		margin: 3px 10px 10px 10px;
+	}
+
+	.listitem input.pull-right {
+		margin-top: 10px;
+		width: 25px;
+	}
+		
+	#social table {
+		margin: auto;
+	}
+	#social img {
+		width: 250px;
+		margin: auto;
+		display: block
+	}
+	</style>
+	<script type="text/javascript">
+	"use strict";
+
+	var HOST_IP = 'http://10.0.9.47:8080';
+	// var HOST_IP = 'http://192.168.1.10:8080';
+	//var HOST_IP = 'http://localhost:8080';
+	// var TOKEN = '13fd8fbfced';
+	var TOKEN = getParameterByName('access_token');
+
+
+	function getParameterByName(name) {
+	    name = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+	    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+	        results = regex.exec(location.search);
+	    return results == null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+	}
+
+	(function($) {
+
+	$.fn.serializeObject = function()
+	{
+	    var o = {};
+	    var a = this.serializeArray();
+	    $.each(a, function() {
+	        if (o[this.name] !== undefined) {
+	            if (!o[this.name].push) {
+	                o[this.name] = [o[this.name]];
+	            }
+	            o[this.name].push(this.value || '');
+	        } else {
+	            o[this.name] = this.value || '';
+	        }
+	    });
+	    return o;
+	};
+
+	var Drink = Backbone.Model.extend({
+
+	});
+
+	var DrinksCollection = Backbone.Collection.extend({
+	    model: Drink
+	});	
+
+	var DrinkItem = Backbone.View.extend({
+		tagName: 'li',
+		className: 'listitem',
+		template: _.template(
+						'<input type="hidden" name="drinks[<%= index %>][name]" value="<%= name %>"></input>' +
+				  		'<label class="checkbox inline">' + 
+							'<input type="checkbox" name="drinks[<%= index %>][order]"></input>' +
+				  		'<%= title %></label>' + 
+				  		'<input type="number" name="drinks[<%= index %>][qty]" class="input-small pull-right" value="1"></input>' + 
+				  		'<span class="pull-right"><%= price %><abbr title="New Israeli Shekel">NIS</abbr> <span>&times;</span>&nbsp;</span>'
+			  		),
+		events: {
+			'click': 'onClick',
+		},
+		onClick: function(e) {
+			$(this).toggleClass('active');
+			// var chkbox = this.$('input');
+	        // chkbox.prop("checked", !chkbox.prop("checked"));
+		},
+		render: function() {
+			this.$el.html(this.template(this.model.toJSON()));
+			return this;
+		}
+	});
+
+	var DrinksList = Backbone.View.extend({
+		tagName: 'ul',
+		className: 'unstyled',
+	    initialize: function(){
+	    },
+		render: function() {
+			var el = this.$el;
+			this.collection.each(function(drink, index) {
+				drink.set('index', index);
+				el.append(new DrinkItem({model: drink}).render().el);
+			});
+			return this;
+		}
+	});
+
+	var TabItem = Backbone.View.extend({
+		tagName: 'li',
+		render: function(model) {
+			this.$el.append('<li>' + model.name + '</li>');
+		}
+	});
+
+	var Tab = Backbone.View.extend({
+		el: "#tab",
+		initialize: function() {
+
+		},
+		render: function() {
+			var hasDrinks = this.collection != undefined && this.collection.length;
+			if(hasDrinks) {								
+				var ul = $('<ul class="unstyled"></ul>');
+				this.collection.each(function(drink) {
+					ul.append(new TabItem({model: drink}).render.el);
+				});
+				this.$("ul").replaceWith(ul);
+			}
+		}
+	});
+
+	$(document).ready(function() {		
+		// Javascript to enable link to tab
+		var url = document.location.toString();
+		if (url.match('#')) {
+		    $('.nav-tabs a[href=#'+url.split('#')[1]+']').tab('show') ;
+		} 
+
+		// Change hash for page-reload
+		$('.nav-tabs a').on('shown', function (e) {
+		    window.location.hash = e.target.hash;
+		})
+
+
+
+		var drinks = new DrinksCollection();
+		drinks.add(new Drink({name: 'beer', title: 'Beer', price: 20}));
+		drinks.add(new Drink({name: 'wine', title: 'Wine', price: 40}));
+		drinks.add(new Drink({name: 'spirit', title: 'Spirit', price: 50}));
+		drinks.add(new Drink({name: 'cocktail', title: 'Cocktail', price: 40}));
+		drinks.add(new Drink({name: 'softdrink', title: 'Soft Drink', price: 15}));
+		drinks.add(new Drink({name: 'htobeverage', title: 'Hot Beverage', price: 15}));
+
+		var drinks = new DrinksList({collection: drinks});
+		$('#orderform').append(drinks.render().el);
+
+		new Tab().render();
+
+		$("#orderform").submit(function() {
+			var drinks = [];			
+			for(var i=0; i<5; i++) {
+				var drink = {};
+				if(!$("input[name='drinks[" + i + "][order]']", $(this)).is(":checked"))
+					continue;
+				drink.name = $("input[name='drinks[" + i + "][name]']", $(this)).val();
+				drink.qty = $("input[name='drinks[" + i + "][qty]']", $(this)).val();
+				drinks.push(drink);
+			}
+			console.log(drinks);
+			$.ajax({
+				type: 'POST',
+				url: HOST_IP + '?order&access_token=' + TOKEN,
+				dataType: 'json',
+			    contentType : 'application/json',
+				data: JSON.stringify(drinks),
+				success: function() {			
+					// cometd.publish('/echo', {foo:'bar'});
+
+					$("#orderform").prepend('<div class="alert alert-success"><i class="icon-spinner icon-spin"></i> Please wait</div>');
+					// $("#orderbtn").text('Submit').button('reset').toggleClass('btn-primary btn-danger');
+					cometd.publish('/echo');
+				},
+				error: function(jqHXR, textStatus, error) {					
+					console.log(error);
+					// $("#orderbtn").text('Submit').button('reset').toggleClass('btn-primary btn-danger');
+					$("#orderform").prepend('<div class="alert alert-danger"><a class="close" data-dismiss="alert" href="#">&times;</a>Order Failed!</div>');
+				},
+			});
+			return false;
+		});
+		$("#orderbtn").click(function(e){
+			e.preventDefault();
+			// $(this).text('Abort');
+			// $("#orderbtn").toggleClass('btn-primary btn-danger');		
+			// $(this).attr('disabled', 'disabled');
+			$("#orderform").submit();
+			return false;
+		});
+
+		$("#social").append('<img src="' + HOST_IP + '/?qr&access_token=' + TOKEN + '"></img>');			
+	});
+
+
+	var cometd = $.cometd;
+	cometd.configure({
+		url: 'http://localhost:8080/cometd',
+		// logLevel: 'debug'
+	});
+	cometd.init(HOST_IP + '/cometd');
+	// cometd.publish('/echo');
+	var sub = cometd.addListener('/echo', function(data) {
+		// alert(data.toString());
+		var drink = data.data;
+		new Tab().render({collection: new DrinksCollection([
+				drink
+			])});
+		$('a[href="#tab"]').tab('show');
+		$("#tab").prepend('<div>' + drink.name + ' &times; ' + drink.qty + '</div>');
+		$("#tab .alert").remove();
+		$("#tab").prepend('<div class="alert alert-success"><i class="icon-beer"></i> <strong>Cheers, enjoy your ' + drink.name + '!</strong><br/><small>We want you back, so please drink responsibly.</small></div>');
+		$("#orderform .alert").remove();
+		$("#paybtn").removeAttr('disabled');
+		if(sub)
+			cometd.removeListener(sub);
+		// cometd.unsubscribe(sub);
+	});		
+
+	})(jQuery);
+	</script>
+</head>
+<body>
+<img id="logo" src="img/header.png"></img>	
+<div id="main">
+	<div class="container">
+		<div class="tabbable">
+			<div>
+				<ul class="nav nav-tabs">
+				  <li class="active"><a href="#home" data-toggle="tab">Home</a></li>
+				  <li><a href="#menu" data-toggle="tab">Menu</a></li>
+				  <li><a href="#tab" data-toggle="tab">Tab</a></li>
+				  <li><a href="#social" data-toggle="tab">Social</a></li>
+				</ul>
+			</div>
+			<div class="tab-content">
+			  <div class="tab-pane active" id="home">
+			  	<div class="well">
+			  		<h2>Hello and welcome to our bar.</h2>
+					<i class="icon-food icon-2x"></i>
+					<i class="icon-coffee icon-2x"></i>
+					<i class="icon-beer icon-2x"></i>
+					<i class="icon-qrcode icon-2x"></i>
+					<br/>
+					<br/>
+					<p class=""><span class="text-info"><i class="icon-play-sign icon-large"></i> Now Playing: </span><marquee class="muted pull-right" direction="left">Nirvana - Smells Like Teen Spirit</marquee></p>
+					<br/>
+					<div>
+						<ul class="unstyled">
+						<li><span class="badge badge-inverse">18</span> People in the bar</li>
+						<li class="muted"><span class="badge badge-inverse">50</span> <span style="color:#000">Drinks served</span> <span class="badge">24</span> Beers <span class="badge">6</span> Spirits <span class="badge">5</span> Soft drinks</li>
+						<li class="text-info"><span class="badge badge-info">10</span> <i class="icon-twitter icon-large"></i> Tweets from here</li>
+						<li class="text-info"><span class="badge badge-info">5</span> <i class="icon-facebook icon-large"></i>  Likes on posts made here</li>
+						</ul>
+					</div>
+			  	</div>
+			  </div>
+			  <div class="tab-pane" id="menu">
+			  	<form id="orderform"></form>
+			  	<div class="form-actions">
+			  		<button id="orderbtn" type="submit" class="btn btn-primary">Submit</button>
+			  	</div>
+			  </div>
+			  <div class="tab-pane" id="tab">
+			  	<div class="alert">
+				  <i class="icon-exclamation-sign icon-large text-warning"></i>
+				  You have't had any drinks yet..
+				</div>
+				<div class="form-actions"><button id="paybtn" class="btn btn-success" type="button" data-toggle="modal" data-target="#credit" disabled="disabled">Pay Now</button></div>
+			  </div> 
+			  <div class="tab-pane" id="social">
+			  	<div class="alert">
+				  <i class="icon-exclamation-sign icon-large text-warning"></i>
+				  You still haven't connected to anyone in the bar
+				</div>
+				<br/>
+				<div id="events">
+					<h2><i class="icon-calendar"></i> Events</h2>
+				<table class="table-condensed table-bordered table-striped">
+				    <thead>
+			        <tr>
+			          <th colspan="7">
+			            <span class="btn-group">
+			            	<a class="btn"><i class="icon-chevron-left"></i></a>
+			            	<a class="btn active">February 2012</a>
+			            	<a class="btn"><i class="icon-chevron-right"></i></a>
+			            </span>
+			          </th>
+			        </tr>
+			        <tr>
+	            <th>Su</th>
+	            <th>Mo</th>
+	            <th>Tu</th>
+	            <th>We</th>
+	            <th>Th</th>
+	            <th>Fr</th>
+	            <th>Sa</th>
+	        </tr>
+	    			</thead>
+					    <tbody>
+					        <tr>
+					            <td class="muted">29</td>
+					            <td class="muted">30</td>
+					            <td class="muted">31</td>
+					            <td>1</td>
+					            <td>2</td>
+					            <td>3</td>
+					            <td>4</td>
+					        </tr>
+					        <tr>
+					            <td>5</td>
+					            <td>6</td>
+					            <td>7</td>
+					            <td>8</td>
+					            <td>9</td>
+					            <td>10</td>
+					            <td>11</td>
+					        </tr>
+					        <tr>
+					            <td>12</td>
+					            <td>13</td>
+					            <td>14</td>
+					            <td>15</td>
+					            <td>16</td>
+					            <td>17</td>
+					            <td>18</td>
+					        </tr>
+					        <tr>
+					            <td>19</td>
+					            <td class="btn-primary"><strong>20</strong></td>
+					            <td>21</td>
+					            <td>22</td>
+					            <td>23</td>
+					            <td>24</td>
+					            <td>25</td>
+					        </tr>
+					        <tr>
+					            <td>26</td>
+					            <td>27</td>
+					            <td>28</td>
+					            <td>29</td>
+					            <td class="muted">1</td>
+					            <td class="muted">2</td>
+					            <td class="muted">3</td>
+					        </tr>
+					    </tbody>
+					</table>
+				</div>
+				<br/>
+			  	<h2><i class="icon-qrcode"></i> QRCode</h2>			
+			  </div>	
+			  </div>
+			</div>
+		</div>	 
+	</div>
+</div>
+
+
+<div class="modal hide fade" id="credit">
+	  <div class="modal-header">
+	    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	    <h3>Payment</h3>
+	  </div>
+	  <div class="modal-body">
+<div class="row-fluid">
+  <form class="form-horizontal">
+    <fieldset>
+      <!-- Card Number -->
+      <div class="control-group">
+        <label class="control-label" for="email">Card Number</label>
+        <div class="controls">
+          <input type="text" id="email" name="email" placeholder="" class="input-xlarge">
+        </div>
+      </div>
+ 
+      <!-- Expiry-->
+      <div class="control-group">
+        <label class="control-label" for="password">Card Expiry Date</label>
+        <div class="controls">
+          <select class="span3" name="expiry_month" id="expiry_month">
+            <option></option>
+            <option value="01">Jan (01)</option>
+            <option value="02">Feb (02)</option>
+            <option value="03">Mar (03)</option>
+            <option value="04">Apr (04)</option>
+            <option value="05">May (05)</option>
+            <option value="06">June (06)</option>
+            <option value="07">July (07)</option>
+            <option value="08">Aug (08)</option>
+            <option value="09">Sep (09)</option>
+            <option value="10">Oct (10)</option>1
+            <option value="11">Nov (11)</option>
+            <option value="12">Dec (12)</option>
+          </select>
+          <select class="span2" name="expiry_year">
+            <option value="13">2013</option>
+            <option value="14">2014</option>
+            <option value="15">2015</option>
+            <option value="16">2016</option>
+            <option value="17">2017</option>
+            <option value="18">2018</option>
+            <option value="19">2019</option>
+            <option value="20">2020</option>
+            <option value="21">2021</option>
+            <option value="22">2022</option>
+            <option value="23">2023</option>
+          </select>
+        </div>
+      </div>
+ 
+      <!-- CVV -->
+      <div class="control-group">
+        <label class="control-label"  for="password_confirm">Card CVV</label>
+        <div class="controls">
+          <input type="password" id="password_confirm" name="password_confirm" placeholder="" class="span2">
+        </div>
+      </div>
+  
+    </fieldset>
+  </form>
+</div>
+	  </div>
+	  <div class="modal-footer">
+	    <a href="#" class="btn btn-primary">Submit</a>
+	  </div>
+	</div>
+
+
+</body>
+</html>
